@@ -2,6 +2,8 @@ package com.example.bytevideotest;
 
 import static androidx.documentfile.provider.DocumentFile.fromSingleUri;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.documentfile.provider.DocumentFile;
 
@@ -19,11 +21,39 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.MediaController;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.VideoView;
+
+
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
+import androidx.media3.common.ErrorMessageProvider;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.common.util.Util;
+import androidx.media3.datasource.DataSource;
+import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.RenderersFactory;
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider;
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm;
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.DecoderInitializationException;
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException;
+import androidx.media3.exoplayer.offline.DownloadRequest;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.ads.AdsLoader;
+import androidx.media3.exoplayer.util.DebugTextViewHelper;
+import androidx.media3.exoplayer.util.EventLogger;
+import androidx.media3.ui.PlayerView;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -36,9 +66,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.Socket;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    private int portNum, deviceId, baudRate;
     int totalSize = 0;
     public Uri selectedFile;
     private Handler mainHandler;
@@ -50,92 +80,95 @@ public class MainActivity extends AppCompatActivity {
     Context context = null;
     long totalRead = 0;
     long cnt;
-    int bytesToRead = 50 * 1024;
+
     // UI variables definition ↓
     private Button send_btn, select_file_btn;
-    private VideoView videoView, videoView2;
+    private PlayerView videoView, videoView2;
+    protected @Nullable ExoPlayer player;
+    protected @Nullable ExoPlayer player2;
+    MediaItem mediaItem, mediaItem2;
     private TextView directoryText;
     private int mPlayerPosition;
     private File mBufferFile;
 
     // https://stackoverflow.com/a/21549067
     private class GetYoutubeFile extends Thread {
-        private String mUrl;
-        private String mFile;
         public GetYoutubeFile() {
-
         }
 
         @Override
         public void run() {
-            mainHandler.post(() -> { // 메인 Handler를 통해 메인 스레드에 "Server is offline." 내용의 Toast Message를 띄움.
-            try {
-                Log.i("GetYoutubeFile", "Start the func.");
+            mainHandler.post(() -> {
+                try {
+                    Log.i("GetYoutubeFile", "Start the func.");
 
-                // 출력물 파일을 담을 File 형 변수 bufferFile 생성.
-                File bufferFile = File.createTempFile("GetYoutubeFile", "mp4");
+                    // 출력물 파일을 담을 File 형 변수 bufferFile 생성.
+                    File bufferFile = File.createTempFile("GetYoutubeFile", "mp4");
 
-                //
-                BufferedOutputStream bufferOS = new BufferedOutputStream(new FileOutputStream(bufferFile));
+                    //
+                    BufferedOutputStream bufferOS = new BufferedOutputStream(new FileOutputStream(bufferFile));
 
-                // 선택된 파일을 InputStream 변수로 초기화.
-                InputStream is = getContentResolver().openInputStream(selectedFile);
-                // 생성자( 대상 InputStream, 버퍼의 크기 설정)
-                BufferedInputStream bIS = new BufferedInputStream(is, 2048);
+                    // 선택된 파일을 InputStream 변수로 초기화.
+                    InputStream is = getContentResolver().openInputStream(selectedFile);
+                    // 생성자( 대상 InputStream, 버퍼의 크기 설정)
+                    BufferedInputStream bIS = new BufferedInputStream(is, 2048);
 
-                /*
-                InputStream is1 = getContentResolver().openInputStream(selectedFile);
-                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                    /*
+                    InputStream is1 = getContentResolver().openInputStream(selectedFile);
+                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
-                for (int data = is1.read(); data != -1; data = is1.read()) {
-                    Log.i("GetYoutubeFile", "data: " + data);
-                    //byteArrayOutputStream.write(data);
-                }
-                Log.i("GetYoutubeFile", "is: " + byteArrayOutputStream.toString());
-                */
-
-                byte[] buffer = new byte[16384]; // == 2^14
-                int numRead;
-                boolean started = false;
-                cnt = 0;
-                // 데이터의 다음 바이트를 반환하거나 파일 끝에 도달하면 -1을 반환.
-                while ((numRead = bIS.read(buffer)) != -1) {
-                    cnt++;
-                    // buffer[offset(0)]부터 numRead만큼의 바이트를 bufferOS에 씀.
-                    totalRead += numRead;
-                    //if((cnt%2)==0) continue;
-
-                    bufferOS.write(buffer, 0, numRead);
-                    Log.i("GetYoutubeFile", "numRead: "+numRead+", cnt: "+cnt);
-                    // 버퍼가 모두 채워지거나 close(), flush() 호출 → 버퍼의 모든 내용을 파일에 출력.
-                    bufferOS.flush();
-
-                        Log.i("GetYoutubeFile", "test, "+cnt);
-                        //Log.i("GetYoutubeFile", "path: " + bufferFile.getAbsolutePath());
-                        mPlayerPosition = videoView2.getCurrentPosition();
-                        videoView2.setVideoPath(bufferFile.getAbsolutePath());
-                        videoView2.start();
-                    /*if(cnt > 10){
-                        setSourceAndStartPlay(bufferFile);
-                        Log.i("GetYoutubeFile", "BufferHIT:StartPlay");
-                        started = true;
-                        break;
-                    }*/
-                    //setSourceAndStartPlay(bufferFile);
-                    if (totalRead >= totalSize && !started) {
-                        //setSourceAndStartPlay(bufferFile);
-                        Log.i("GetYoutubeFile", "BufferHIT:StartPlay");
-                        started = true;
+                    for (int data = is1.read(); data != -1; data = is1.read()) {
+                        Log.i("GetYoutubeFile", "data: " + data);
+                        //byteArrayOutputStream.write(data);
                     }
+                    Log.i("GetYoutubeFile", "is: " + byteArrayOutputStream.toString());
+                    */
+
+                    byte[] buffer = new byte[16384]; // == 2^14
+                    int numRead;
+                    boolean started = false;
+                    cnt = 0;
+                    mediaItem2 = MediaItem.fromUri(bufferFile.getAbsolutePath());
+                    player2.setMediaItem(mediaItem2);
+                    //player2.prepare();
+                    // 데이터의 다음 바이트를 반환하거나 파일 끝에 도달하면 -1을 반환.
+                    while ((numRead = bIS.read(buffer)) != -1) {
+                        cnt++;
+                        // buffer[offset(0)]부터 numRead만큼의 바이트를 bufferOS에 씀.
+                        totalRead += numRead;
+                        //if((cnt%2)==0) continue;
+
+                        bufferOS.write(buffer, 0, numRead);
+                        // 버퍼가 모두 채워지거나 close(), flush() 호출 → 버퍼의 모든 내용을 파일에 출력.
+                        bufferOS.flush();
+
+                        //player2.play();
+
+                        Log.i("GetYoutubeFile", "numRead: " + numRead + ", cnt: " + cnt);
+
+                        /*if(cnt > 700){
+                            setSourceAndStartPlay(bufferFile);
+                            Log.i("GetYoutubeFile", "BufferHIT:StartPlay");
+                            started = true;
+                            break;
+                        }*/
+                        //setSourceAndStartPlay(bufferFile);
+                        if (totalRead >= totalSize && !started) {
+                            setSourceAndStartPlay(bufferFile);
+                            Log.i("GetYoutubeFile", "BufferHIT:StartPlay");
+                            started = true;
+                        }
+                    }
+                    Log.i("GetYoutubeFile", "The end of the loop.");
+                    mBufferFile = bufferFile;
+                    is.close();
+                    bIS.close();
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
                 }
-                Log.i("GetYoutubeFile", "The end of the loop.");
-                mBufferFile = bufferFile;
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-                throw new RuntimeException(e);
-            }
             });
         }
     }
@@ -143,11 +176,11 @@ public class MainActivity extends AppCompatActivity {
     public void setSourceAndStartPlay(File bufferFile) {
         try {
             mainHandler.post(() -> { // 메인 Handler를 통해 메인 스레드에 "Server is offline." 내용의 Toast Message를 띄움.
-                Log.i("GetYoutubeFile", "test, "+cnt);
-                //Log.i("GetYoutubeFile", "path: " + bufferFile.getAbsolutePath());
-                mPlayerPosition = videoView2.getCurrentPosition();
-                videoView2.setVideoPath(bufferFile.getAbsolutePath());
-                videoView2.start();
+                Log.i("GetYoutubeFile", "test, " + cnt);
+                //mediaItem2 = MediaItem.fromUri(bufferFile.getAbsolutePath());
+                //player2.setMediaItem(mediaItem2);
+                player2.prepare();
+                player2.play();
             });
         } catch (IllegalArgumentException e) {
             Log.e("GetYoutubeFile_Err", "IllegalArgumentException");
@@ -159,22 +192,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    @OptIn(markerClass = UnstableApi.class)
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //Toast.makeText(MainActivity.this, "Fuck", Toast.LENGTH_LONG);
         select_file_btn = findViewById(R.id.selectFileBtn);
 
+        player = new ExoPlayer.Builder(MainActivity.this).setMediaSourceFactory(
+                        new DefaultMediaSourceFactory(getApplicationContext()).setLiveTargetOffsetMs(5000))
+                .build(); // 인자를 this → getApplicationContext() 또는 MainActivity.this로 변환 시 에러 NullException 해결.
+        player2 = new ExoPlayer.Builder(MainActivity.this).setMediaSourceFactory(
+                        new DefaultMediaSourceFactory(getApplicationContext()).setLiveTargetOffsetMs(5000))
+                .build();
         videoView = findViewById(R.id.videoView);
+        videoView.setPlayer(player);
         videoView2 = findViewById(R.id.videoView2);
-
-        videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() { // 비디오 리스너 등록.
-            @Override
-            public void onPrepared(MediaPlayer mp) {
-                // 준비 완료되면 비디오 재생.
-                mp.setLooping(true); // 비디오 무한루프 설정: true.
-                mp.start(); // 비디오 재생 시작.
-            }
-        });
+        videoView2.setPlayer(player2);
 
         mainHandler = new Handler(Looper.getMainLooper());
 
@@ -213,15 +247,16 @@ public class MainActivity extends AppCompatActivity {
                 totalSize = Integer.parseInt(getRealSizeFromUri(this, selectedFile));
                 Log.i("GetYoutubeFile", "size: " + totalSize);
 
-                //Log.i("GetYoutubeFile", "Size of file: " + getRealSizeFromUri(this, selectedFile));
-                /*
-                try {
-                } catch (IOException e) {
-                    Log.e("transportThread_onActivityResult", "transportThread err");
-                    e.printStackTrace();
-                }*/
+                //videoView.setVideoURI(selectedFile); // 비디오뷰에 선택된 비디오 파일을 전달, 재생.
 
-                videoView.setVideoURI(selectedFile); // 비디오뷰에 선택된 비디오 파일을 전달, 재생.
+                // Build the media item.
+                mediaItem = MediaItem.fromUri(selectedFile);
+                // Set the media item to be played.
+                player.setMediaItem(mediaItem);
+                // Prepare the player.
+                player.prepare();
+                // Start the playback.
+                player.play();
             }
         }
     }
