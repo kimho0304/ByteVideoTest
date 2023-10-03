@@ -69,7 +69,7 @@ import java.net.Socket;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    int totalSize = 0;
+    long totalSize;
     public Uri selectedFile;
     private Handler mainHandler;
     private static final int REQ_CODE = 123; // startActivityForResult에 쓰일 사용자 정의 요청 코드
@@ -98,31 +98,58 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void run() {
+            // 3초 영상: 476,201 bytes
+            // 9초 영상: 17,561,215 bytes
+            // 2시간 영상: 약 9억 bytes
+
             mainHandler.post(() -> {
                 try {
                     Log.i("GetYoutubeFile", "Start the func.");
 
+                    /*File bufferFile2 = File.createTempFile("GetYoutubeFile2", "mp4");
+                    BufferedOutputStream bufferOS2 = new BufferedOutputStream(new FileOutputStream(bufferFile2));
+                    InputStream is2 = getContentResolver().openInputStream(selectedFile);
+                    BufferedInputStream bIS2 = new BufferedInputStream(is2, 2048);
+                    byte[] buffer2 = new byte[16384]; // == 2^14
+                    int numRead2;
+                    while ((numRead2 = bIS2.read(buffer2)) != -1) {
+                        for(int i=0;i<16384;i++)
+                            buffer2[i] += 1;
+                            //Log.i("GetYoutubeFile", "data: " + buffer2[i]);
+                        bufferOS2.write(buffer2, 0, numRead2);
+                        bufferOS2.flush();
+                    }
+                    is2.close();
+                    bIS2.close();
+
+                    File bufferFile3 = File.createTempFile("GetYoutubeFile3", "mp4");
+                    BufferedOutputStream bufferOS3 = new BufferedOutputStream(new FileOutputStream(bufferFile3));
+                    InputStream is3 = getContentResolver().openInputStream(Uri.fromFile(bufferFile2));
+                    BufferedInputStream bIS3 = new BufferedInputStream(is3, 2048);
+                    byte[] buffer3 = new byte[16384]; // == 2^14
+                    int numRead3;
+                    while ((numRead3 = bIS3.read(buffer3)) != -1) {
+                        for(int i=0;i<16384;i++)
+                            buffer3[i] -= 1;
+                        //Log.i("GetYoutubeFile", "data: " + buffer2[i]);
+                        bufferOS3.write(buffer3, 0, numRead3);
+                        bufferOS3.flush();
+                    }
+                    is3.close();
+                    bIS3.close();*/
+
                     // 출력물 파일을 담을 File 형 변수 bufferFile 생성.
                     File bufferFile = File.createTempFile("GetYoutubeFile", "mp4");
 
-                    //
+                    // 데이터를 쓸 파일(bufferFile)을 FileOutputStream 객체로 래핑 후, BufferedOutputStream 객체 생성자로 넘김.
+                    // 최종적으로 BufferedOutputStream의 쓰기 작업 결과는 bufferFile에 쓰임.
                     BufferedOutputStream bufferOS = new BufferedOutputStream(new FileOutputStream(bufferFile));
 
-                    // 선택된 파일을 InputStream 변수로 초기화.
+                    // 선택된 영상 파일을 InputStream 변수로 초기화.
                     InputStream is = getContentResolver().openInputStream(selectedFile);
-                    // 생성자( 대상 InputStream, 버퍼의 크기 설정)
+
+                    // BufferedInputStream 생성자( 대상 InputStream, 버퍼의 크기 설정 )
                     BufferedInputStream bIS = new BufferedInputStream(is, 2048);
-
-                    /*
-                    InputStream is1 = getContentResolver().openInputStream(selectedFile);
-                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-
-                    for (int data = is1.read(); data != -1; data = is1.read()) {
-                        Log.i("GetYoutubeFile", "data: " + data);
-                        //byteArrayOutputStream.write(data);
-                    }
-                    Log.i("GetYoutubeFile", "is: " + byteArrayOutputStream.toString());
-                    */
 
                     byte[] buffer = new byte[16384]; // == 2^14
                     int numRead;
@@ -176,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
     public void setSourceAndStartPlay(File bufferFile) {
         try {
             mainHandler.post(() -> { // 메인 Handler를 통해 메인 스레드에 "Server is offline." 내용의 Toast Message를 띄움.
-                Log.i("GetYoutubeFile", "test, " + cnt);
+                //Log.i("GetYoutubeFile", "test, " + cnt);
                 //mediaItem2 = MediaItem.fromUri(bufferFile.getAbsolutePath());
                 //player2.setMediaItem(mediaItem2);
                 player2.prepare();
