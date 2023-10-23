@@ -39,7 +39,7 @@ import java.net.Socket;
 
 public class MainActivity extends AppCompatActivity {
     private int portNum, deviceId, baudRate;
-    int totalSize = 0;
+    int totalSize;
     public Uri selectedFile;
     private Handler mainHandler;
     private static final int REQ_CODE = 123; // startActivityForResult에 쓰일 사용자 정의 요청 코드
@@ -205,9 +205,10 @@ public class MainActivity extends AppCompatActivity {
                 String filename = queryName(getContentResolver(), selectedFile);
                 Log.i("videocrypto_filename", filename);
 
-                DocumentFile fileName = fromSingleUri(this, selectedFile); // URI 객체인 selectedFile을 새로운 DocumentFile형 객체에 할당. URI 객체의 경우 파일의 원본 정보가 아닌 새로 래핑된 정보만 제공하므로,
-
+                DocumentFile fileName = fromSingleUri(this, selectedFile);
+                // URI 객체인 selectedFile을 새로운 DocumentFile형 객체에 할당. URI 객체의 경우 파일의 원본 정보가 아닌 새로 래핑된 정보만 제공하므로,
                 // 원본 정보를 볼 수 있는 DocumentFile 객체에 새로 할당한다.
+
                 directoryText.setText(fileName.getName()); // fileName의 이름, 즉 원본 파일명을 directoryText에 할당.
 
                 totalSize = Integer.parseInt(getRealSizeFromUri(this, selectedFile));
